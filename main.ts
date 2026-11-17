@@ -40,3 +40,37 @@ const MAX_SLIPPAGE_BPS = 300;
 // The smallest cash balance worth deploying (the 1 USDC minimum notional,
 // with a little headroom).
 const MIN_CASH = 2_000_000n;
+
+// ---------------------------------------------------------------- state
+
+// The reference price of the open position, in the symbol's price scale:
+// the cash spent on the quantity still held (fees included), per unit.
+// Computed from the account the harness sends each batch, so it stays exact
+// through fills and never depends on a price the bot guessed.
+function entryPrice(state: BarsState): bigint | null {
+  const pos = state.positions.get(SYMBOL);
+  if (pos === undefined || pos.qty === 0n) return null;
+  const sym = state.symbols.get(SYMBOL);
+  if (sym === undefined) return null;
+  const scale = BigInt(sym.qty_scale + sym.price_scale);
+  const quote = BigInt(state.hello.capital.quote_scale);
+  return (pos.cost * 10n ** scale) / (pos.qty * 10n ** quote);
+}
+
+// The price, in the symbol's price scale, of a basis-point move from a base.
+function shifted(price: bigint, bps: number, up: boolean): bigint {
+  return up
+    ? (price * BigInt(10_000 + bps)) / 10_000n
+    : (price * BigInt(10_000 - bps)) / 10_000n;
+}
+
+// The price the bot last sold at (the close of the batch the sell was
+// decided on), or null when it has never sold. The re-entry band is built
+// around this price.
+let lastSellPrice: bigint | null = null;
+
+// True once the bot has taken its first position. The first buy happens on
+// the first tradable batch; a buy rejected there (a gap past max slippage,
+// a missing bar) is retried on the next batch while the bot is still flat
+// and has never sold.
+let everBought = false;
