@@ -131,3 +131,11 @@ function decide(state: BarsState, _batch: Batch): OrderInput[] {
     },
   ];
 }
+
+// ---------------------------------------------------------------- wire-up
+
+await runBars({
+  onBatch(state, batch) {
+    return decide(state, batch);
+  },
+});
