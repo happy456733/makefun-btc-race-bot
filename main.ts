@@ -74,3 +74,60 @@ let lastSellPrice: bigint | null = null;
 // a missing bar) is retried on the next batch while the bot is still flat
 // and has never sold.
 let everBought = false;
+
+// ---------------------------------------------------------------- decisions
+
+// Decide this batch's orders. The bar of the batch is the one that just
+// closed; any order sent now fills at the next bar's open.
+function decide(state: BarsState, _batch: Batch): OrderInput[] {
+  if (state.warmingUp) return [];
+  const close = state.close(SYMBOL);
+  if (close === null) return [];
+  const held = state.positions.get(SYMBOL);
+  const qty = held === undefined ? 0n : held.qty;
+
+  if (qty > 0n) {
+    // Holding: sell on take-profit, or on the stop. The sell is recorded
+    // against this close so the re-entry band can be built from it.
+    const entry = entryPrice(state);
+    if (entry !== null) {
+      const takeProfitAt = shifted(entry, TAKE_PROFIT_BPS, true);
+      const stopAt = shifted(entry, STOP_BPS, false);
+      if (close >= takeProfitAt || close <= stopAt) {
+        lastSellPrice = close;
+        return [
+          {
+            side: "sell",
+            symbol: SYMBOL,
+            qty,
+            max_slippage_bps: MAX_SLIPPAGE_BPS,
+          },
+        ];
+      }
+    }
+    return [];
+  }
+
+  // Flat: buy when the re-entry band says so, or on the first tradable
+  // batch when the bot has never bought. The band is a pullback below the
+  // last sell price, or a breakout above it by the same width.
+  let buy = false;
+  if (!everBought) {
+    buy = true;
+  } else if (lastSellPrice !== null) {
+    const rebuyLow = shifted(lastSellPrice, PULLBACK_BPS, false);
+    const rebuyHigh = shifted(lastSellPrice, PULLBACK_BPS, true);
+    buy = close <= rebuyLow || close >= rebuyHigh;
+  }
+  if (!buy) return [];
+  if (state.cash < MIN_CASH) return [];
+  everBought = true;
+  return [
+    {
+      side: "buy",
+      symbol: SYMBOL,
+      notional_quote_units: state.cash,
+      max_slippage_bps: MAX_SLIPPAGE_BPS,
+    },
+  ];
+}
