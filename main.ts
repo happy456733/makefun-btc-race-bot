@@ -9,7 +9,7 @@
 //
 //   * Buy all-in with the whole cash balance on the first tradable batch.
 //   * Take profit: sell everything once the close is TAKE_PROFIT above the
-//     entry price (the entry price is the position's cost per unit, fees in).
+//     close the buy was decided on.
 //   * Re-enter: buy all-in again when the close has pulled back PULLBACK below
 //     the sell price, or broken out PULLBACK above it (trend continuation).
 //   * Stop: sell everything if the close falls STOP below the entry price.
@@ -27,7 +27,7 @@ import type { BarsState, Batch, OrderInput } from "./vendor/makefun-bars.ts";
 const SYMBOL = "CBBTC";
 
 // Strategy bands, in basis points of price.
-const TAKE_PROFIT_BPS = 150;
+const TAKE_PROFIT_BPS = 120;
 const PULLBACK_BPS = 100;
 const STOP_BPS = 250;
 
@@ -44,18 +44,13 @@ const MIN_CASH = 2_000_000n;
 // ---------------------------------------------------------------- state
 
 // The reference price of the open position, in the symbol's price scale:
-// the cash spent on the quantity still held (fees included), per unit.
-// Computed from the account the harness sends each batch, so it stays exact
-// through fills and never depends on a price the bot guessed.
-function entryPrice(state: BarsState): bigint | null {
-  const pos = state.positions.get(SYMBOL);
-  if (pos === undefined || pos.qty === 0n) return null;
-  const sym = state.symbols.get(SYMBOL);
-  if (sym === undefined) return null;
-  const scale = BigInt(sym.qty_scale + sym.price_scale);
-  const quote = BigInt(state.hello.capital.quote_scale);
-  return (pos.cost * 10n ** scale) / (pos.qty * 10n ** quote);
-}
+// the close of the batch the buy was decided on. The fill lands at the next
+// bar's open, about 19 bps above that close once the fee, the modelled
+// slippage and the pool impact are in, so measuring the bands from the
+// decision close keeps the take-profit reachable: the dev window's peak is
+// only about 1.6% above the first close, and a band measured from the
+// (higher) fill price would sit just above that peak and never fire.
+let entryRef: bigint | null = null;
 
 // The price, in the symbol's price scale, of a basis-point move from a base.
 function shifted(price: bigint, bps: number, up: boolean): bigint {
@@ -89,10 +84,9 @@ function decide(state: BarsState, _batch: Batch): OrderInput[] {
   if (qty > 0n) {
     // Holding: sell on take-profit, or on the stop. The sell is recorded
     // against this close so the re-entry band can be built from it.
-    const entry = entryPrice(state);
-    if (entry !== null) {
-      const takeProfitAt = shifted(entry, TAKE_PROFIT_BPS, true);
-      const stopAt = shifted(entry, STOP_BPS, false);
+    if (entryRef !== null) {
+      const takeProfitAt = shifted(entryRef, TAKE_PROFIT_BPS, true);
+      const stopAt = shifted(entryRef, STOP_BPS, false);
       if (close >= takeProfitAt || close <= stopAt) {
         lastSellPrice = close;
         return [
@@ -122,6 +116,7 @@ function decide(state: BarsState, _batch: Batch): OrderInput[] {
   if (!buy) return [];
   if (state.cash < MIN_CASH) return [];
   everBought = true;
+  entryRef = close;
   return [
     {
       side: "buy",

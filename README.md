@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/btc-race-24h-20261117-0603/happy456733/makefun-btc-race-bot/rank.svg)](https://make.fun/bounty/btc-race-24h-20261117-0603/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=btc-race-24h-20261117-0603)
 [![reward](https://make.fun/badge/btc-race-24h-20261117-0603/happy456733/makefun-btc-race-bot/reward.svg)](https://make.fun/bounty/btc-race-24h-20261117-0603?utm_source=github&utm_medium=readme&utm_campaign=btc-race-24h-20261117-0603)
 
-A swing trading bot for cbBTC/USDC that races a BTC trading bot live for 24 hours on make.fun. It buys all-in on the first tradable minute bar, takes profit at +1.5% over its entry price, re-enters on a 1.0% pullback below (or breakout above) its last sell price, and stops out at −2.5% below entry. It trades rarely on purpose: on the choppy dev window a full-size round trip costs roughly 38 bps in fees, slippage and price impact, so fast signals only bleed fees.
+A swing trading bot for cbBTC/USDC that races a BTC trading bot live for 24 hours on make.fun. It buys all-in on the first tradable minute bar, takes profit at +1.2% over the close its buy was decided on, re-enters on a 1.0% pullback below (or breakout above) its last sell price, and stops out at −2.5% below its entry reference. It trades rarely on purpose: on the choppy dev window a full-size round trip costs roughly 38 bps in fees, slippage and price impact, so fast signals only bleed fees.
 
 ## Run it
 
